@@ -1,0 +1,101 @@
+{% extends "default.twig" %}
+
+{% block body %}
+
+    <p class="feed">
+        <a href="?locale={{ locale }}&amp;rss">
+        <img src="./assets/images/icon-rss-48x48.png" alt="rss"/>
+        Subscribe to the RSS feed for your locale!
+        </a>
+    </p>
+
+    <div id="locale_page_title">
+        <a href="http://wiki.mozilla.org/L10n:Teams:{{ locale }}">{{ locale }}</a>{{ locamotion ? '<img src="assets/images/locamotion.png" class="locamotion" />' : '' }}
+    </div>
+
+    <h2 class="title_anchor" id="lang_status"><a href="#lang_status">#</a>State of your lang files <small>(data updated every 15 minutes)</small></h2>
+
+    {% if has_lang_files %}
+        {% if display_errors %}
+            {% if data_source_type == "lang" %}
+                <table class="file_detail">
+                    <tr>
+                      <th class="main_column">{$site}A</th>
+                      <th>Missing</th>
+                      <th>Errors</th>
+                      <th>Deadline</th>
+                      <th>Critical</th>
+                    </tr>
+            </table>
+            {% else %}
+                <table class="file_detail">
+                    <tr>
+                      <th class="main_column">{$site}B</th>
+                      <th>Status</th>
+                      <th>Deadline</th>
+                      <th>Critical</th>
+                    </tr>
+            </table>
+            {% endif %}
+        {% else %}
+            <table>
+                <tr>
+                   <th class="main_column">{$site}C</th>
+                 <th><span style='color:gray'>All Files translated</span></th>
+                </tr>
+            </table>
+        {% endif %}
+
+        {% include 'stats_graph.twig' %}
+    {% else %}
+        <p>There are no files tracked for this locale at the moment.</p>
+    {% endif %}
+
+
+    <h2 class="title_anchor" id="bugs"><a href="#bugs">#</a>Open bugs for your locale:</h2>
+    {% if has_bugs %}
+        <ul>
+        {% for bug_number, bug_title in bugs %}
+            <li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id={{ bug_number }}'>{{ bug_number }}: {{ bug_title }}</a></li>
+        {% endfor %}
+
+        </ul>
+    {% else %}
+        <p>No bugs. Good job!</p>
+    {% endif %}
+
+    <h2 class="title_anchor" id="web_projects"><a href="#web_projects">#</a>External Web Projects Status ({{ locale }})</h2>
+    {% if locale_has_web_projects %}
+        <p>Hover your mouse on a cell in the <em>Status</em> column to display statistics or errors for a specific project.
+        <br/><small>Data updated about every 3 hours. Last update: {$last_update_local}.</small></p>
+        <table class="web_projects">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>%</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for data in webprojects_data %}
+                <tr>
+                    <td>{{ data.name }}</td>
+                    <td class="perc">{{ data.percent }}</td>
+                    <td class="status" title="{{ data.message }}">
+                        <span class="web_projects_status web_projects_errors" style="width: {{ data.errors }}%;">error</span>
+                        <span class="web_projects_status web_projects_trans" style="width: {{ data.translated }}%;"></span>
+                        <span class="web_projects_status web_projects_untrans" style="width: {{ data.untranslated }}%;"></span>
+                        <span class="web_projects_status web_projects_fuzzy" style="width: {{ data.fuzzy }}%;"></span>
+                        <span class="web_projects_status web_projects_identical" style="width: {{ data.identical }}%;"></span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p><small>An alternative view for web projects is <a href="https://l10n.mozilla-community.org/~flod/webstatus/?locale={{ locale }}">available in this page</a>.</small></p>
+    {% else %}
+        <p>There are no web projects available for this locale.</p>
+    {% endif %}
+
+
+{% endblock %}

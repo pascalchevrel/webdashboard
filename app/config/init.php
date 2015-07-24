@@ -1,5 +1,4 @@
 <?php
-namespace Webdashboard;
 
 // We always work with UTF8 encoding
 mb_internal_encoding('UTF-8');
@@ -30,5 +29,15 @@ if (DEBUG) {
     error_reporting(E_ALL);
 }
 
+// Set up Twig environment
+$templates = new Twig_Loader_Filesystem(__DIR__ . '/../templates/');
+$options = [
+    'cache' => false,
+    // 'cache' => 'cache',
+];
+
+$twig = new Twig_Environment($templates, $options);
+
 // This is the default template, views can define a different one
+// TODO: kill with twig above
 $template = 'default.php';

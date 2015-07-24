@@ -192,9 +192,11 @@ if ($total_errors > 0) {
     );
 }
 
+cli_dump($locale_has_web_projects);
 // Add information about external web projects
 if (isset($webprojects['locales'][$locale])) {
     $locale_has_web_projects = true;
+
     $last_update_local = date('Y-m-d H:i e (O)', strtotime($webprojects['metadata']['creation_date']));
 
     // Generate a list of products for this locale and sort them by name

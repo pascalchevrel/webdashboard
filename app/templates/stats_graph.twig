@@ -8,7 +8,7 @@
 <script>
 graph = new Dygraph(
     document.getElementById("graphdiv"),
-    "https://l10n.mozilla-community.org/~pascalc/web_l10n_stats/logs/<?=$locale?>.csv", // path to CSV file
+    "https://l10n.mozilla-community.org/~pascalc/web_l10n_stats/logs/{{ locale }}.csv", // path to CSV file
     {
         gridLineColor: 'lightgray',
         highlightCircleSize: 5,

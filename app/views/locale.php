@@ -1,23 +1,9 @@
 <?php
 namespace Webdashboard;
 
-$rss_status = <<<RSS
-<p class="feed">
-    <a href="?locale={$locale}&amp;rss">
-    <img src="./assets/images/icon-rss-48x48.png" alt="rss"/>
-    Subscribe to the RSS feed for your locale!
-    </a>
-</p>
-<div id="locale_page_title">
-    <a href="http://wiki.mozilla.org/L10n:Teams:{$locale}">{$locale}</a>
-RSS;
-if ($locamotion) {
-    $rss_status .= '<img src="assets/images/locamotion.png" class="locamotion" />';
-}
-$rss_status .= '</div>';
+$lang_files_status = '';
 
-$lang_files_status = '<h2 class="title_anchor" id="lang_status"><a href="#lang_status">#</a>State of your lang files <small>(data updated every 15 minutes)</small></h2>';
-
+cli_dump($lang_files);
 foreach ($lang_files as $site => $site_files) {
     $rows = '';
     $display_errors = false;
@@ -25,6 +11,7 @@ foreach ($lang_files as $site => $site_files) {
     foreach ($site_files as $file => $details) {
         // Determine critical status
         $critical = (isset($details['critical']) && $details['critical']) ? '<strong>Yes</strong>' : 'No';
+        $lang[]['critical'] = $critical;
 
         // Determine deadline status
         $deadline_class = '';
@@ -42,6 +29,7 @@ foreach ($lang_files as $site => $site_files) {
         } else {
             $deadline = '-';
         }
+        $lang[]['deadline'] = $deadline;
 
         if ($details['data_source'] == 'lang') {
             // Standard .lang file
@@ -141,63 +129,144 @@ foreach ($lang_files as $site => $site_files) {
     }
 }
 
-if (isset($lang_files['www.mozilla.org'])) {
-    $optin_url = LANG_CHECKER . "?action=optin&locale={$locale}";
-    $lang_files_status .= "<p><small>Reminder: Your staging site for mozilla.org/{$locale}/ is " .
-                          "<a href='https://www-dev.allizom.org/{$locale}'>www-dev.allizom.org/{$locale}/</a><br/>" .
-                          "The list of opt-in pages for mozilla.org is available <a href='{$optin_url}'>here</a>.</small></p>";
-}
 
-if (count($lang_files) == 0) {
-    $lang_files_status .= "<p>There are no files tracked for this locale at the moment.</p>";
-} else {
-    ob_start();
-    include 'stats_graph.php';
-    $lang_files_status .= ob_get_contents();
-    ob_end_clean();
-}
+$lang_files_status = '';
 
-ob_start();
-echo '<h2 class="title_anchor" id="bugs"><a href="#bugs">#</a>Open bugs for your locale:</h2>';
-echo '<ul>';
+foreach ($lang_files as $site => $site_files) {
+    $display_errors = false;
 
-if (count($bugs) > 0) {
-    foreach ($bugs as $bug_number => $bug_title) {
-        echo "<li><a href='https://bugzilla.mozilla.org/show_bug.cgi?id={$bug_number}'>{$bug_number}: {$bug_title}</a></li>";
+    foreach ($site_files as $file => $details) {
+        // Determine critical status, boolean
+        $lang[]['critical'] = isset($details['critical']) && $details['critical'];
+
+        // Determine deadline status
+        $deadline_class = '';
+        $deadline = '-';
+
+        if (isset($details['deadline'])) {
+            $deadline_timestamp = (new \DateTime($details['deadline']))->getTimestamp();
+            if ($deadline_timestamp < time()) {
+                $deadline = date('F d Y', $deadline_timestamp);
+                $deadline_class = 'deadline_overdue';
+            } elseif (($deadline_timestamp - 604800) < time()) { // 7 days (60 * 60 * 24 * 7)
+                $deadline = date('F d', $deadline_timestamp);
+                $deadline_class = 'deadline_closing';
+            }
+        }
+
+        $lang[]['deadline'] = $deadline;
+
+        if ($details['data_source'] == 'lang') {
+            // Standard .lang file
+            $file_missing = $details['identical'] + $details['missing'];
+            $file_errors = $details['errors'];
+            if ($file_missing + $file_errors > 0) {
+                // File has missing strings (identical or actually missing)
+                $display_errors = true;
+
+                $link = function ($errors) use ($locale, $file) {
+                    $url = LANG_CHECKER . "?locale={$locale}#{$file}";
+                    return $errors > 0
+                    ? "<a href='{$url}'>{$errors}</a>"
+                    : '-';
+                };
+
+                $error_display   = $link($file_errors);
+                $missing_display = $link($file_missing);
+
+                $rows[$site][$file] = [
+                    'url'            => $url,
+                    'file'           => $file,
+                    'missing'        => $missing_display,
+                    'error'          => $error_display,
+                    'deadline_class' => $deadline_class,
+                    'deadline'       => $deadline,
+                    'critical'       => $critical,
+
+                ];
+            }
+        } else {
+            // Raw file with only a generic status
+            $url = LANG_CHECKER . "?locale={$locale}#{$site}";
+            $cmp_status = $details['status'];
+            $file_flags = isset($details['flags']) ? $details['flags'] : [];
+
+            // We display a file only if it's untranslated or outdated, other cases
+            // are displayed only if file is not optional
+            $hide_file = true;
+
+            if ($cmp_status == 'untranslated' || $cmp_status == 'outdated') {
+                $hide_file = false;
+            } elseif (($cmp_status == 'missing_locale' || $cmp_status == 'missing_reference') &&
+                ! in_array('optional', $file_flags)) {
+                // File is missing and it's not optional
+                $hide_file = false;
+            }
+
+            if (! $hide_file) {
+                // Display warnings only if the file is not optional
+                $rows .= "  <tr>\n" .
+                         "    <th class='main_column'><a href='{$url}'>{$file}</a></th>\n" .
+                         "    <td><span class='raw_status raw_{$cmp_status}'>" . str_replace('_', ' ', $cmp_status) . "</span></td>" .
+                         "    <td class='{$deadline_class}'>{$deadline}</td>\n" .
+                         "    <td>{$critical}</td>\n" .
+                         "  </tr>\n";
+                $display_errors = true;
+            }
+        }
     }
-} else {
-    echo '<li>No bugs. Good job!</li>';
+
+    if ($display_errors) {
+        /* The type of data source is identical for all files in a website.
+         * Since I have errors, there's at least one file that I can use to
+         * determine the data source type, no need to check if it exists.
+         */
+        $data_source_type = array_shift($site_files)['data_source'];
+
+        if ($data_source_type == 'lang') {
+            // Standard .lang file
+            $lang_files_status .= "\n<table class='file_detail'>\n" .
+                                  "  <tr>\n" .
+                                  "    <th class='main_column'>{$site}</th>\n" .
+                                  "    <th>Missing</th>\n" .
+                                  "    <th>Errors</th>\n" .
+                                  "    <th>Deadline</th>\n" .
+                                  "    <th>Critical</th>\n" .
+                                  "  </tr>\n" .
+                                  $rows .
+                                  "</table>\n";
+        } else {
+            // Raw file with only a generic status
+            $lang_files_status .= "\n<table class='file_detail'>\n" .
+                                  "  <tr>\n" .
+                                  "    <th class='main_column'>{$site}</th>\n" .
+                                  "    <th>Status</th>\n" .
+                                  "    <th>Deadline</th>\n" .
+                                  "    <th>Critical</th>\n" .
+                                  "  </tr>\n" .
+                                  $rows .
+                                  "</table>\n";
+        }
+    } else {
+        $lang_files_status .= "\n<table>\n" .
+                              "  <tr>\n" .
+                              "    <th class='main_column'>{$site}</th>\n" .
+                              "    <th><span style='color:gray'>All Files translated</span></th>\n" .
+                              "  </tr>\n" .
+                              "</table>\n";
+    }
 }
 
-echo '</ul>';
-
-$bugs_status = ob_get_contents();
-ob_end_clean();
-
-ob_start();
-
-echo "<h2 class=\"title_anchor\" id=\"web_projects\"><a href=\"#web_projects\">#</a>External Web Projects Status ({$locale})</h2>\n";
+$webprojects_data = [];
 if ($locale_has_web_projects) {
-    echo "<p>Hover your mouse on a cell in the <em>Status</em> column to display statistics or errors for a specific project.<br/>
-          <small>Data updated about every 3 hours. Last update: {$last_update_local}.</small></p>\n";
-    echo "
-<table class='web_projects'>
-  <thead>
-    <tr>
-      <th>Project</th>
-      <th>%</th>
-      <th>Status</th>
-    </tr>
-  </thead>
-  <tbody>\n";
     foreach ($available_products as $product_code => $product_name) {
         $webproject = $webprojects['locales'][$locale][$product_code];
 
         // Initialize values
         $untrans_width = 0;
-        $fuzzy_width = 0;
-        $errors_width = 0;
-        $trans_width = 0;
+        $fuzzy_width   = 0;
+        $errors_width  = 0;
+        $trans_width   = 0;
 
         if ($webproject['error_status']) {
             // File has errors
@@ -234,36 +303,43 @@ if ($locale_has_web_projects) {
             $trans_width = 100 - $fuzzy_width - $identical_width - $untrans_width;
         }
 
-        echo  "
-    <tr>
-      <td>{$webproject['name']}</td>
-      <td class='perc'>{$webproject['percentage']}</td>
-      <td class='status' title='{$message}'>
-        <span class='web_projects_status web_projects_errors' style='width: {$errors_width}%;'>error</span>
-        <span class='web_projects_status web_projects_trans' style='width: {$trans_width}%;'></span>
-        <span class='web_projects_status web_projects_untrans' style='width: {$untrans_width}%;'></span>
-        <span class='web_projects_status web_projects_fuzzy' style='width: {$fuzzy_width}%;'></span>
-        <span class='web_projects_status web_projects_identical' style='width: {$identical_width}%;'></span>
-      </td>
-    </tr>\n";
+        $webprojects_data[] = [
+            'name'         => $webproject['name'],
+            'percent'      => $webproject['percentage'],
+            'message'      => $message,
+            'errors'       => $errors_width,
+            'translated'   => $trans_width,
+            'untranslated' => $untrans_width,
+            'fuzzy_width'  => $fuzzy_width,
+            'identical'    => $identical_width
+        ];
     }
-    echo "  </tbody>\n</table>\n" .
-         "  <p><small>An alternative view for web projects is <a href='https://l10n.mozilla-community.org/~flod/webstatus/?locale={$locale}'>available in this page</a>.</small></p>\n";
-} else {
-    echo '<p>There are no web projects available for this locale.</p>';
 }
-$webprojects_status = ob_get_contents();
-ob_end_clean();
-
-// build the content based on the various blocks we just created
-$content = $rss_status . $lang_files_status . $bugs_status . $webprojects_status;
 
 /*
 if we ask for an rss page, we just pass the $rss object created
 in the model that contains the data we want to the object renderer
  */
-if (!isset($_GET['rss'])) {
-    include __DIR__ . '/../templates/' . $template;
+if (! isset($_GET['rss'])) {
+    print $twig->render(
+        'locale.twig',
+        [
+            // 'main_content' => '',
+            'body_class'              => '',
+            'locale'                  => $locale,
+            'locamotion'              => $locamotion,
+            'lang_files'              => $lang_files,
+            'lang_files_status'       => $lang_files_status,
+            'last_update_local'       => $last_update_local,
+            'has_lang_files'          => count($lang_files) > 0,
+            'has_bugs'                => count($bugs) > 0,
+            'bugs'                    => $bugs,
+            'locale_has_web_projects' => $locale_has_web_projects,
+            'webprojects_data'        => $webprojects_data,
+            'display_errors'          => $display_errors,
+            'data_source_type'        => $data_source_type,
+        ]
+    );
 } else {
     print $rss->buildRSS();
 }

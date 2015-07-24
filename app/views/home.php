@@ -1,11 +1,17 @@
 <?php
 
-$content = '<div id="locales"><ul>';
+$main_content = '<div id="locales"><ul>';
 
 foreach ($locales as $locale) {
-    $content .= "<li><a href=\"./?locale={$locale}\">{$locale}</a></li>";
+    $main_content .= "<li><a href=\"./?locale={$locale}\">{$locale}</a></li>";
 }
 
-$content .= "</ul></div>";
+$main_content .= "</ul></div>";
 
-include __DIR__ . '/../templates/' . $template;
+print $twig->render(
+    'default.twig',
+    [
+        'main_content' => $main_content,
+        'body_class' => '',
+    ]
+);
